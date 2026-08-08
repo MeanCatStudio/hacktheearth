@@ -53,6 +53,8 @@ loadingManager.onLoad = () =>
     document.addEventListener('click', OnClick);
     window.addEventListener('mousemove', OnMouseMove);
     window.addEventListener('wheel', OnZoom);
+    window.addEventListener('touchmove', OnTouchMove);
+    window.addEventListener('touchend', OnTouchEnd);
 }
 
 const directionalLight = new three.DirectionalLight(0xffffff, 3);
@@ -81,24 +83,28 @@ gltfLoader.load(`${import.meta.env.BASE_URL}assets/models/earth_2.glb`, (file) =
     if (aboutUs)
     { aboutUs.material = earthMaterial; }
 }, (xhr) => { }, (error) => { console.log(`error ocured while loading earth: ${error}`); });
+
 let aboutUs = null;
-let aboutUsMaterial = null;
-const aboutUsCamreaPos = new three.Vector3().copy(Utility.GetSphericalPosition(96 * deg2Rad, 42 * deg2Rad, 85));
-console.log(aboutUsCamreaPos);
-//const CamerPosDebug = new three.Mesh(Utility.debugSphereGeometry, Utility.debugMaterialGreen);
-//CamerPosDebug.position.copy(aboutUsCamreaPos);
-//scene.add(CamerPosDebug);
-gltfLoader.load(`${import.meta.env.BASE_URL}assets/models/aboutUs.glb`, (file) => 
+let aboutUsMaterial = new three.MeshStandardMaterial();
+const aboutUsCamreaPos = new three.Vector3().copy(Utility.GetSphericalPosition(98 * deg2Rad, 42 * deg2Rad, 85));
+gltfLoader.load(`${import.meta.env.BASE_URL}assets/models/aboutUs_2.glb`, (file) => 
 {
-    console.log(file);
+    //console.log(file);
     aboutUs = file.scene.children[0];
     scene.add(aboutUs);
     aboutUs.scale.multiplyScalar(MODEL_SCALE);
-    aboutUsMaterial = aboutUs.material;
     
     if (earthMaterial)
     { aboutUs.material = earthMaterial; }
 })
+
+const aboutUsTexturePath = `${import.meta.env.BASE_URL}assets/textures/${Utility.IsMoble() ? 'AboutUs_Moble.png' : 'AboutUs.png'}`
+textureLoader.load(aboutUsTexturePath, (texture) => {
+    console.log(texture);
+    texture.colorSpace = three.SRGBColorSpace;
+    texture.flipY = false;
+    aboutUsMaterial.map = texture;
+});
 
 controls.minDistance = EARTH_RADIUS + 2;
 controls.maxDistance = EARTH_RADIUS * 3;
@@ -140,6 +146,17 @@ for (let i = 0; i < nearDetailPrams.count; i++)
     mesh.scale.y = 0;
 }
 
+const desktopLabelConfigs = [
+    { text: "2,000+", long: 98, lati: 42.5 },
+    { text: "10", long: 110, lati: 42.5 },
+    { text: "$70,000+", long: 83, lati: 42.5 },
+];
+const mobleLabelConfigs = [
+    { text: "2,000+", long: 98, lati: 44 },
+    { text: "10", long: 98, lati: 49 },
+    { text: "$70,000+", long: 98, lati: 39 },
+];
+
 let title = null;
 const farLabels = [];
 const nearLabels = [];
@@ -165,6 +182,7 @@ fontLoader.load(`${import.meta.env.BASE_URL}assets/fonts/roboto.json`, (font) =>
     CreateFarLabel("Credits", -134, -24, 70, { size: 10, depth: 2 });
     CreateFarLabel("Settings", 45, -75, 70, { size: 10, depth: 2, letterSpacing: 4 });
 
+    const textConfigs = Utility.IsMoble() ? mobleLabelConfigs : desktopLabelConfigs;
     function CreateNearLabel(text, long, lati, parms = {}) 
     {        
         const label = new Label(text, font, parms);
@@ -173,9 +191,9 @@ fontLoader.load(`${import.meta.env.BASE_URL}assets/fonts/roboto.json`, (font) =>
         nearLabels.push(label);
         label.UpdateScale(0);
     }
-    CreateNearLabel("2,000+", 98, 42.5, { size: 2, depth: 1.5, letterSpacing: .5 });
-    CreateNearLabel("10", 110, 42.5, { size: 2, depth: 1.5, letterSpacing: .5 });
-    CreateNearLabel("$70,000+", 83, 42.5, { size: 2, depth: 1.5, letterSpacing: .5 });
+    CreateNearLabel(textConfigs[0].text, textConfigs[0].long, textConfigs[0].lati, { size: 2, depth: 1.5, letterSpacing: .5 });
+    CreateNearLabel(textConfigs[1].text, textConfigs[1].long, textConfigs[1].lati, { size: 2, depth: 1.5, letterSpacing: .5 });
+    CreateNearLabel(textConfigs[2].text, textConfigs[2].long, textConfigs[2].lati, { size: 2, depth: 1.5, letterSpacing: .5 });
 
 });
 
@@ -198,14 +216,7 @@ function GoToPOI(poiPos)
 let canZoom = true;
 function OnZoom(event)
 {
-    if (canZoom)
-    {
-        const newLayer = Utility.Clamp(zoomLayer - Math.sign(event.deltaY), 0, 2);
-        if (newLayer != zoomLayer && UpdateZoomLayer(newLayer))
-        {
-            zoomLayer = newLayer;
-        }
-    }
+    UpdateZoomLayer(- Math.sign(event.deltaY));
 }
 
 //const farToNearThreshold = .3;
@@ -213,49 +224,13 @@ function OnZoom(event)
 const ANGLE_TO_CONTENT_THRESHOLD = 20 * deg2Rad;
 let zoomLayer = 0 // 0: title, 1: far(Main Page), 2: near(Content)
 
-/*function ToggleFarDetail(enabled)
-{
-    for (let i = 0; i < farDetailPrams.count; i++)
-    {
-        gsap.to(farDetails.children[i].scale, { duration: .5, y: enabled ? 1 : 0 });
-    }
-}
-
-function ToggleNearDetail(enabled)
-{
-    for (let i = 0; i < nearDetailPrams.count; i++)
-    {
-        gsap.to(nearDetails.children[i].scale, { duration: .5, y: enabled ? 1 : 0 });
-    }
-}
-
-function UpdateZoomElements(zoomFactor)
-{
-    //controls.zoomSpeed = zoomFactor;
-    controls.rotateSpeed = zoomFactor;
-    
-    const farLabelsScale = Utility.Clamp((zoomFactor - farToNearThreshold) * 5, 0, 1);
-    for (let i = 0; i < farLabels.length; i++)
-    {
-        farLabels[i].UpdateScale(farLabelsScale);
-    }
-    const nearLabelsScale = Utility.Clamp(-(zoomFactor - farToNearThreshold), 0, 1);
-    for (let i = 0; i < nearLabels.length; i++)
-    {
-        //nearLabels[i].UpdateScale(nearLabelsScale);
-    }
-
-    if (farEnalbed != zoomFactor > farToNearThreshold)
-    {
-        farEnalbed = !farEnalbed;
-        ToggleFarDetail(farEnalbed);
-        ToggleNearDetail(!farEnalbed);
-    }
-}*/
-
 const CAMERA_ZOOM_DISTANCE = [175, 125, 85];
-function UpdateZoomLayer(newLayer)
+function UpdateZoomLayer(change) // +1: zoom in, -1: zoom out
 {
+    const newLayer = Utility.Clamp(zoomLayer + change, 0, 2);
+    if (!canZoom || newLayer == zoomLayer)
+    { return }
+
     const tweenObj = { 
         currentLayer: zoomLayer,
         zoomDistance: camera.position.length(), 
@@ -321,12 +296,14 @@ function UpdateZoomLayer(newLayer)
             earthMaterial.color.lerpColors(FAR_EARTH_COLOR, NEAR_EARTH_COLOR, tweenObj.nearScale);
     }, onComplete: function(){
         canZoom = true;
-        controls.enabled = true;
+        controls.enabled = zoomLayer != 2;
         if (zoomLayer == 2)
         {
             aboutUs.material = aboutUsMaterial;
         }
     }});
+        
+    zoomLayer = newLayer;
 
     return true;
 }
@@ -386,3 +363,40 @@ function OnWindowResize(event)
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 window.addEventListener('resize', OnWindowResize);
+
+const figures = {
+    fingureX_1: 0,
+    fingureY_1: 0,
+    fingureX_2: 0,
+    fingureY_2: 0
+};
+function OnTouchMove(event)
+{
+    const touches = event.touches;
+    if (touches.length > 1)
+    {
+        if (figures.fingureX_1 != -1)
+        {
+            const prevDist = Math.sqrt(Math.pow(Math.abs(figures.fingureX_1 - figures.fingureX_2), 2) + Math.pow(Math.abs(figures.fingureY_1 - figures.fingureY_2), 2));
+            const curentDist = Math.sqrt(Math.pow(Math.abs(touches[0].clientX - touches[1].clientX), 2) + Math.pow(Math.abs(touches[0].clientY - touches[1].clientY), 2));
+
+            if (Math.abs(prevDist - curentDist) > 1)
+            {
+                UpdateZoomLayer(-Math.sign(prevDist - curentDist))
+            }
+        }
+
+        figures.fingureX_1 = touches[0].clientX;
+        figures.fingureY_1 = touches[0].clientY;
+        figures.fingureX_2 = touches[1].clientX;
+        figures.fingureY_2 = touches[1].clientY;
+    }
+}
+
+function OnTouchEnd(event)
+{
+    figures.fingureX_1 = -1;
+    figures.fingureY_1 = -1;
+    figures.fingureX_2 = -1;
+    figures.fingureY_2 = -1;
+}

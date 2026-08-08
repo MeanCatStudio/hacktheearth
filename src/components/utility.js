@@ -76,4 +76,6 @@ export default class Utility
     }
 
     static Clamp(num, min, max) { return Math.min(Math.max(num, min), max); }
+
+    static IsMoble() { return window.innerHeight / window.innerWidth > 1; }
 }
