@@ -42,7 +42,7 @@ const dracoLoader = new DRACOLoader(loadingManager);
 const gltfLoader = new GLTFLoader(loadingManager);
 const fontLoader = new FontLoader(loadingManager);
 gltfLoader.setDRACOLoader(dracoLoader);
-loadingManager.onError = () => { console.error("loading Error"); }
+loadingManager.onError = (url) => { console.error(`Loading error: ${url}`); }
 
 const deg2Rad = Math.PI / 180;
 loadingManager.onLoad = () => 
@@ -70,7 +70,7 @@ let earth = null;
 let earthMaterial = null;
 const FAR_EARTH_COLOR = new three.Color(0x67E735);
 const NEAR_EARTH_COLOR = new three.Color(0x4ba927);
-gltfLoader.load('assets/models/earth_2.glb', (file) => 
+gltfLoader.load(`${import.meta.env.BASE_URL}assets/models/earth_2.glb`, (file) => 
 {
     //console.log(file);
     scene.add(file.scene); // adds the land and water
@@ -80,7 +80,7 @@ gltfLoader.load('assets/models/earth_2.glb', (file) =>
 
     if (aboutUs)
     { aboutUs.material = earthMaterial; }
-});
+}, (xhr) => { }, (error) => { console.log(`error ocured while loading earth: ${error}`); });
 let aboutUs = null;
 let aboutUsMaterial = null;
 const aboutUsCamreaPos = new three.Vector3().copy(Utility.GetSphericalPosition(96 * deg2Rad, 42 * deg2Rad, 85));
@@ -88,7 +88,7 @@ console.log(aboutUsCamreaPos);
 //const CamerPosDebug = new three.Mesh(Utility.debugSphereGeometry, Utility.debugMaterialGreen);
 //CamerPosDebug.position.copy(aboutUsCamreaPos);
 //scene.add(CamerPosDebug);
-gltfLoader.load('assets/models/aboutUs.glb', (file) => 
+gltfLoader.load(`${import.meta.env.BASE_URL}assets/models/aboutUs.glb`, (file) => 
 {
     console.log(file);
     aboutUs = file.scene.children[0];
@@ -143,7 +143,7 @@ for (let i = 0; i < nearDetailPrams.count; i++)
 let title = null;
 const farLabels = [];
 const nearLabels = [];
-fontLoader.load('../assets/fonts/roboto.json', (font) => { 
+fontLoader.load(`${import.meta.env.BASE_URL}assets/fonts/roboto.json`, (font) => { 
     function CreateFarLabel(text, long, lati, dist, parms)
     {
         const label = new Label(text, font, parms);
