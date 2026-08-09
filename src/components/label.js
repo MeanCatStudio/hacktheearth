@@ -11,7 +11,7 @@ export default class Label
     #text = " ";
     #lettersFlatOffsets = []
 
-    constructor(text, font,  { size = 5, depth = 1, color = 0xffffff, letterSpacing = 1 }) // creates the letters and label object
+    constructor(text, font,  { size = 5, depth = 1, color = 0xffffff, letterSpacing = 1, disableShadow = false }) // creates the letters and label object
     {
         this.#text = text;
         const textOptions = 
@@ -44,6 +44,7 @@ export default class Label
             const letterMesh = new three.Mesh(letterGeometry, this.#material);
             letterMesh.position.x = currentX - boundingBox.min.x;
             this.root.add(letterMesh);
+            letterMesh.castShadow = !disableShadow;
             const letterWidth = boundingBox.max.x - boundingBox.min.x;
             currentX += letterWidth + letterSpacing;            
         }
@@ -62,8 +63,8 @@ export default class Label
         }
 
         const debugRootMesh = new three.Mesh(Utility.debugSphereGeometry, Utility.debugMaterialRed);
-        this.root.add(debugRootMesh);
-        this.#lettersFlatOffsets.push(debugRootMesh.position.x);
+        //this.root.add(debugRootMesh);
+        //this.#lettersFlatOffsets.push(debugRootMesh.position.x);
     };
 
     PositionText(long, lati, distance) // positions the label and letter objects
@@ -117,7 +118,7 @@ export default class Label
             letter.position.copy(pos);
             this.root.worldToLocal(letter.position);
             
-            letter.setRotationFromMatrix(Utility.RotationMatrixFromDownVector(pos.negate()));
+            letter.setRotationFromMatrix(Utility.RotationMatrixFromDownVector(pos.negate().normalize()));
             letter.rotateZ(-letter.rotation.z * .5); // rotation from down vector is buged, leading to z rotation being doubled of what it's intened, can't find solution
         }
 

@@ -25,16 +25,18 @@ export default class Utility
     static #matrix = new three.Matrix4();
     static #matrixRight = new three.Vector3();
     static #matrixUp = new three.Vector3();
+    static #forwards = new three.Vector3();
     static #matrixBack = new three.Vector3();
     static RotationMatrixFromLookVector(forwards)
     {
-        forwards.normalize();
-        this.#matrixRight.copy(forwards);
+        this.#forwards.copy(forwards);
+        this.#forwards.normalize();
+        this.#matrixRight.copy(this.#forwards);
         this.#matrixRight.cross(this.up); // right vector
         this.#matrixRight.normalize();
         this.#matrixUp.copy(this.#matrixRight);
-        this.#matrixUp.cross(forwards); // up vector
-        this.#matrixBack.copy(forwards.negate());
+        this.#matrixUp.cross(this.#forwards); // up vector
+        this.#matrixBack.copy(this.#forwards.negate());
 
         this.#matrix.set(
             this.#matrixRight.x, this.#matrixUp.x, this.#matrixBack.x, 0,

@@ -1,5 +1,5 @@
 import * as three from "three";
-import { TrackballControls } from "three/addons/controls/TrackballControls.js";
+//import { TrackballControls } from "three/addons/controls/TrackballControls.js";
 import { OrbitControls } from "three/examples/jsm/Addons.js";
 import gsap from 'gsap';
 import GUI from 'lil-gui';
@@ -17,9 +17,11 @@ const scene = new three.Scene();
 Utility.scene = scene;
 const DEFAULT_CAMERA_FOV = 75;
 const camera = new three.PerspectiveCamera(DEFAULT_CAMERA_FOV, window.innerWidth / window.innerHeight, 0.1, 1000);
+scene.add(camera);
 
 const renderer = new three.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -34,7 +36,7 @@ const gui = new GUI({ width: 400 });
 const guiObject = {};
 
 const axes = new three.AxesHelper(1000, 1000);
-scene.add(axes);
+//scene.add(axes);
 
 const loadingManager = new three.LoadingManager();
 const textureLoader = new three.TextureLoader(loadingManager);
@@ -45,6 +47,7 @@ gltfLoader.setDRACOLoader(dracoLoader);
 loadingManager.onError = (url) => { console.error(`Loading error: ${url}`); }
 
 const deg2Rad = Math.PI / 180;
+let mouseDown = false;
 loadingManager.onLoad = () => 
 {
     console.log("Starting");
@@ -55,12 +58,22 @@ loadingManager.onLoad = () =>
     window.addEventListener('wheel', OnZoom);
     window.addEventListener('touchmove', OnTouchMove);
     window.addEventListener('touchend', OnTouchEnd);
+    window.addEventListener('pointerdown', () => { mouseDown = true; });
+    window.addEventListener('pointerup', () => { mouseDown = false; });
+    window.addEventListener('pointercancel', () => { mouseDown = false; });
 }
 
 const directionalLight = new three.DirectionalLight(0xffffff, 3);
-const lightPosFormCamea = new three.Vector3(-100, 100, 200);
+const lightPosFormCamea = new three.Vector3(-100, 100, 100);
 scene.add(directionalLight);
 scene.add(new three.DirectionalLightHelper(directionalLight, 10));
+directionalLight.position.set(0, 150, 0);
+directionalLight.castShadow = true;
+directionalLight.shadow.camera.top = 100;
+directionalLight.shadow.camera.bottom = -100;
+directionalLight.shadow.camera.left = -100;
+directionalLight.shadow.camera.right = 100;
+//scene.add(new three.CameraHelper(directionalLight.shadow.camera));
 
 const ambiantLight = new three.AmbientLight(0xffffff, 1.5);
 scene.add(ambiantLight);
@@ -79,28 +92,55 @@ gltfLoader.load(`${import.meta.env.BASE_URL}assets/models/earth_2.glb`, (file) =
     file.scene.scale.multiplyScalar(MODEL_SCALE); // approximately 64 unit radius
     earth = file.scene.children[1]; // get land only;
     earthMaterial = earth.material;
+    earthMaterial.roughness = 1; 
+    earthMaterial.metalness = 0;
+    const water = file.scene.children[0];
+    water.material.roughness = 0.2;
+    water.material.metalness = .3;
+    earth.receiveShadow = true;
+    water.receiveShadow = true;
 
     if (aboutUs)
     { aboutUs.material = earthMaterial; }
 }, (xhr) => { }, (error) => { console.log(`error ocured while loading earth: ${error}`); });
 
+let clouds = null;
+gltfLoader.load(`${import.meta.env.BASE_URL}assets/models/clouds.glb`, (file) => {
+    clouds = file.scene;
+    scene.add(clouds);
+    clouds.scale.multiplyScalar(MODEL_SCALE);
+    clouds.rotateY(Math.PI * .8);
+    for (let i = 0; i < clouds.children.length; i++)
+    {
+        clouds.children[i].castShadow = true;
+    }
+});
+
 let aboutUs = null;
 let aboutUsMaterial = new three.MeshStandardMaterial();
 const aboutUsCamreaPos = new three.Vector3().copy(Utility.GetSphericalPosition(98 * deg2Rad, 42 * deg2Rad, 85));
-gltfLoader.load(`${import.meta.env.BASE_URL}assets/models/aboutUs_2.glb`, (file) => 
-{
+gltfLoader.load(`${import.meta.env.BASE_URL}assets/models/aboutUs_2.glb`, (file) => {
     //console.log(file);
     aboutUs = file.scene.children[0];
     scene.add(aboutUs);
     aboutUs.scale.multiplyScalar(MODEL_SCALE);
+    aboutUs.receiveShadow = true;
     
     if (earthMaterial)
     { aboutUs.material = earthMaterial; }
 })
 
+textureLoader.load(`${import.meta.env.BASE_URL}assets/textures/lowresSkybox.jpg`, (texture) => {
+    console.log(texture);
+    texture.colorSpace = three.SRGBColorSpace;
+    const skyboxGeo = new three.SphereGeometry(500);
+    const skyboxMat = new three.MeshBasicMaterial({ color: 0x999999, map: texture, side: three.BackSide })
+    const skybox = new three.Mesh(skyboxGeo, skyboxMat);
+    scene.add(skybox);
+});
+
 const aboutUsTexturePath = `${import.meta.env.BASE_URL}assets/textures/${Utility.IsMoble() ? 'AboutUs_Moble.png' : 'AboutUs.png'}`
 textureLoader.load(aboutUsTexturePath, (texture) => {
-    console.log(texture);
     texture.colorSpace = three.SRGBColorSpace;
     texture.flipY = false;
     aboutUsMaterial.map = texture;
@@ -160,6 +200,7 @@ const mobleLabelConfigs = [
 let title = null;
 const farLabels = [];
 const nearLabels = [];
+let titleOffsetFromCamera = new three.Vector3();
 fontLoader.load(`${import.meta.env.BASE_URL}assets/fonts/roboto.json`, (font) => { 
     function CreateFarLabel(text, long, lati, dist, parms)
     {
@@ -170,9 +211,12 @@ fontLoader.load(`${import.meta.env.BASE_URL}assets/fonts/roboto.json`, (font) =>
         label.UpdateScale(0);
     }
 
-    title = new Label("Hack The Earth!", font, { size: 15, depth: 5, letterSpacing: 5 });
-    scene.add(title.root);
+    title = new Label("Hack The Earth!", font, { size: 15, depth: 5, letterSpacing: 5, disableShadow: true });
     title.PositionTextTop(45 * deg2Rad, 90);
+    //title.root.rotation.set(0, 0, 0);
+    //camera.worldToLocal(title.root.position);
+    //camera.attach(title.root);
+    scene.add(title.root);
 
     CreateFarLabel("About Us", 99, 45, 70, { size: 10, depth: 2 });
     console.log(farLabels);
@@ -279,6 +323,11 @@ function UpdateZoomLayer(change) // +1: zoom in, -1: zoom out
             { farLabels[i].UpdateScale(tweenObj.farScale); }
             for (let i = 0; i < nearLabels.length; i++)
             { nearLabels[i].UpdateScale(tweenObj.nearScale); }
+
+            for (let i = 0; i < clouds.children.length; i++)
+            {
+                clouds.children[i].scale.set(tweenObj.titleScale, tweenObj.titleScale, tweenObj.titleScale);
+            }
             
             for (let i = 0; i < farDetailPrams.count; i++)
             {
@@ -296,7 +345,7 @@ function UpdateZoomLayer(change) // +1: zoom in, -1: zoom out
             earthMaterial.color.lerpColors(FAR_EARTH_COLOR, NEAR_EARTH_COLOR, tweenObj.nearScale);
     }, onComplete: function(){
         canZoom = true;
-        controls.enabled = zoomLayer != 2;
+        controls.enabled = true;
         if (zoomLayer == 2)
         {
             aboutUs.material = aboutUsMaterial;
@@ -320,26 +369,33 @@ function Update(time) // time in miliseconds
     directionalLight.position.copy(lightPosFormCamea)
     directionalLight.position.applyMatrix4(cameraRotationMatrix);
 
-    const dist = camera.position.length();
-    const zoomFactor = (dist - controls.minDistance) / (controls.maxDistance - controls.minDistance);
-    //UpdateZoomElements(zoomFactor);
-
-    /*if (Math.abs(zoomAmount) > 1)
+    //const dist = camera.position.length();
+    //const zoomFactor = (dist - controls.minDistance) / (controls.maxDistance - controls.minDistance);
+    
+    if (zoomLayer == 2)
     {
-        zoomAmount -= zoomAmount * deltaTime * .002;
-        camera.fov = DEFAULT_CAMERA_FOV + zoomAmount * .015;
-        camera.updateProjectionMatrix();
-        if (Math.abs(zoomAmount) > ZOOM_THREASHOULD)
+        controls.minPolarAngle = 46 * deg2Rad; // polar angle limits start at north poles
+        controls.maxPolarAngle = 50 * deg2Rad;
+        controls.minAzimuthAngle = -15 * deg2Rad; // Azimuth angles limites starts at the +z axis
+        controls.maxAzimuthAngle = -5 * deg2Rad;
+        if (!mouseDown)
         {
-            const newLayer = Utility.Clamp(zoomLayer - Math.sign(zoomAmount), 0, 2);
-            if (newLayer != zoomLayer)
-            {
-                UpdateZoomLayer(newLayer);
-                zoomLayer = newLayer;
-                zoomAmount *= .25;
-            }
+            camera.position.lerp(aboutUsCamreaPos, deltaTime * .001);
         }
-    }*/
+    }
+    else 
+    { 
+        controls.minPolarAngle = 0;
+        controls.maxPolarAngle = Math.PI;
+        controls.minAzimuthAngle = -Infinity;
+        controls.maxAzimuthAngle = Infinity;
+    }
+    if (zoomLayer == 0)
+    {
+        title.root.setRotationFromMatrix(Utility.RotationMatrixFromLookVector({ x: -camera.position.x, y: camera.position.y * -.5, z: -camera.position.z}))
+        title.root.position.copy(Utility.GetSphericalPosition(-controls.getAzimuthalAngle() + Math.PI * .5, -(controls.getPolarAngle() - Math.PI * .5) * .5 + Math.PI * .5, 90));
+    }
+
     controls.update();
     renderer.render(scene, camera);
 }
