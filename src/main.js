@@ -34,6 +34,7 @@ const raycaster = new three.Raycaster();
 
 const gui = new GUI({ width: 400 });
 const guiObject = {};
+gui.hide();
 
 const axes = new three.AxesHelper(1000, 1000);
 //scene.add(axes);
